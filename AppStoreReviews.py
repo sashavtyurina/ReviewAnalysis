@@ -15,6 +15,10 @@ import string
 import argparse
 import re
 import xml
+import json
+import os
+import ssl
+
 
 appStores = {
 'Argentina':          143505,
@@ -96,12 +100,15 @@ appStores = {
 'Uruguay':            143514
 }
 
-def getReviews(appStoreId, appId,maxReviews=-1):
+
+
+def getReviews(appStoreId, appId, filename, maxReviews=-1):
     ''' returns list of reviews for given AppStore ID and application Id
         return list format: [{"topic": unicode string, "review": unicode string, "rank": int}]
-    ''' 
+    '''
+
     reviews=[]
-    i=0
+    i=2938
     while True: 
         ret = _getReviewsForPage(appStoreId, appId, i)
         i += 1
@@ -111,6 +118,9 @@ def getReviews(appStoreId, appId,maxReviews=-1):
         if len(ret) == 0: # funny do while emulation ;)
             break
         reviews += ret
+        print 'Printing reviews to json'
+        printReviewsToJson(ret, filename)
+
         
         if maxReviews > 0 and len(reviews) > maxReviews:
             break
@@ -128,11 +138,19 @@ def _getReviewsForPage(appStoreId, appId, pageNo):
         u = urllib2.urlopen(req, timeout=30)
         print "try and open urlLib2"
     except urllib2.HTTPError:
-        print "Can't connect to the AppStore, please try again later."
-        raise SystemExit
-    print "before parsing tree"
+        print 'There was a problem connecting. Continue. '
+        return None
+    except ssl.SSLError:
+        print 'There was a problem connecting. Continue. '
+        return None
+    except urllib2.URLError:
+        print 'There was a problem connecting. Continue. '
+        return None
 
-    
+        #print "Can't connect to the AppStore, please try again later."
+        #raise SystemExit
+    # print "before parsing tree"
+
     try:
         root = ElementTree.parse(u).getroot()
     except xml.parsers.expat.ExpatError:
@@ -181,7 +199,37 @@ def _getReviewsForPage(appStoreId, appId, pageNo):
 
         reviews.append(review)
     return reviews
-    
+
+
+def printReviewsToJson(reviews, filename):
+    '''append a chunk of reviews to file in json format
+    '''
+
+
+    if len(reviews) > 0:
+        file = open(filename, 'a')
+        print 'opening file'
+    else:
+        return
+
+    for review in reviews:
+        try:
+            version = review["version"]
+            user = review["user"]
+            rating = review["rank"]
+            topic = review["topic"]
+            text = review["review"]
+
+            jsonObject = json.dumps({"version": version, "user": user, "rating": rating, "topic": topic, "text": text})
+            file.write(jsonObject)
+            file.write(',')
+            #print jsonObject
+
+        except TypeError:
+            print "Bad review: %s" %review
+
+    file.close()
+
 def _print_reviews(reviews, country, filename):
     ''' returns (reviews count, sum rank)
     '''
@@ -219,6 +267,26 @@ def _print_rawmode(reviews):
     for review in reviews:
         print review["topic"], review["review"].replace("\n","")
 
+
+def startJson(filename):
+    '''opens a new file and adds a first line of json array.
+    Comes together with stopJson. '''
+
+    file = open(filename, 'w')
+    file.write('{"reviews": [')
+    file.close()
+
+def stopJson(filename):
+    file = open(filename, 'rb+')
+    file.seek(-1, os.SEEK_END)
+    file.truncate()
+    file.close()
+
+    file = open(filename, 'a')
+    file.write(']}')
+    file.close()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AppStoreReviewsScrapper command line.', epilog='To get your application Id look into the AppStore link to you app, for example http://itunes.apple.com/pl/app/autobuser-warszawa/id335042980?mt=8 - app Id is the number between "id" and "?mt=0"')
     parser.add_argument('-i', '--id', default=0, metavar='AppId', type=int, help='Application Id (see below)')
@@ -251,15 +319,20 @@ if __name__ == '__main__':
             print "\nTotal number of reviews: %d, avg rank: %.2f" % (rankCount, 1.0 * rankSum/rankCount)
         else:
             try:
-                reviews = getReviews(appStores[country], args.id, maxReviews=args.max_reviews)
+                filename = "facebook_reviews2.txt"
+                startJson(filename)
 
-                if args.raw_mode:
-                    _print_rawmode(reviews)
-                    print "printing raw mode"
-                else:
-                    filename = "reviewsForID%s" %args.id
-                    _print_reviews(reviews, country, filename)
-                    print "printing reviews"
+                reviews = getReviews(appStores[country], args.id, filename, maxReviews=args.max_reviews)
+                stopJson(filename)
+
+
+                # if args.raw_mode:
+                #     _print_rawmode(reviews)
+                #     print "printing raw mode"
+                # else:
+                #     filename = "reviewsForID%s" %args.id
+                #     _print_reviews(reviews, country, filename)
+                #     print "printing reviews"
             except KeyError:
                 print "No such country %s!\n\nWell, it could exist in real life, but I dont know it." % country
             pass
