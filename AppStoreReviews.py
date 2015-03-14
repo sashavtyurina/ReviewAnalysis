@@ -108,7 +108,7 @@ def getReviews(appStoreId, appId, filename, maxReviews=-1):
     '''
 
     reviews=[]
-    i=2938
+    i=0
     while True: 
         ret = _getReviewsForPage(appStoreId, appId, i)
         i += 1
@@ -319,7 +319,7 @@ if __name__ == '__main__':
             print "\nTotal number of reviews: %d, avg rank: %.2f" % (rankCount, 1.0 * rankSum/rankCount)
         else:
             try:
-                filename = "facebook_reviews2.txt"
+                filename = "twitter.txt"
                 startJson(filename)
 
                 reviews = getReviews(appStores[country], args.id, filename, maxReviews=args.max_reviews)
